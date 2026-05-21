@@ -8,12 +8,14 @@ dependencies = [
     "pydantic>=2.0.0",
     "fastexcel>=0.10.0",
     "xlsxwriter>=3.2.0",
+    "dataconf-manager[data] @ git+https://github.com/MaximeRighini/dataconf-manager.git",
 ]
 
 [project.optional-dependencies]
 dev = [
     "ruff>=0.15.0",
     "mypy>=1.0.0",
+    "types-PyYAML",
     "pytest>=8.0.0",
     "pytest-cov>=5.0.0",
     "pre-commit>=3.0.0",
