@@ -1,0 +1,26 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: make setup
+
+      - name: Verify linting
+        run: make lint-verify
+
+      - name: Run unit tests
+        run: make test-unit
+
+      - name: Run E2E and non-regression tests
+        run: make test-e2e
