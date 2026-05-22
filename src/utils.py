@@ -5,12 +5,72 @@ They are independently unit-tested and reusable across modules.
 If this file grows too large, split into utils/text.py, utils/validation.py, etc.
 """
 
+import functools
+import logging
+import time
+from collections.abc import Callable
 from typing import Any, TypeVar
 
 import polars as pl
 from pydantic import BaseModel, ValidationError
 
 T = TypeVar("T", bound=BaseModel)
+
+_DEFAULT_LOG_FORMAT = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
+_DEFAULT_DATE_FORMAT = "%Y-%m-%d %H:%M:%S"
+
+
+def setup_logging(level: int = logging.INFO) -> None:
+    """
+    Configures the root logger with a standard format.
+
+    Call once at the top of run.py before instantiating any pipeline.
+    """
+    logging.basicConfig(
+        level=level,
+        format=_DEFAULT_LOG_FORMAT,
+        datefmt=_DEFAULT_DATE_FORMAT,
+    )
+
+
+def timer(func: Callable[..., Any]) -> Callable[..., Any]:
+    """
+    Logs the execution time of a function at DEBUG level.
+
+    Logs to the logger of the module where the decorated function is defined,
+    so log output is clearly attributed to the right file.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        module_logger = logging.getLogger(func.__module__)
+        start = time.perf_counter()
+        result = func(*args, **kwargs)
+        elapsed = time.perf_counter() - start
+        module_logger.debug("[%s] %.3fs", func.__name__, elapsed)
+        return result
+
+    return wrapper
+
+
+def log_df_info(df: pl.DataFrame, name: str = "df") -> None:
+    """
+    Logs shape and column info for a DataFrame at DEBUG level.
+
+    Useful for quick sanity checks inside node functions or modules
+    without adding print statements.
+    """
+    module_logger = logging.getLogger(__name__)
+    col_info = ", ".join(
+        f"{col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes, strict=True)
+    )
+    module_logger.debug(
+        "[%s] shape=(%d, %d) | columns: %s",
+        name,
+        df.height,
+        df.width,
+        col_info,
+    )
 
 
 def normalize_text(column_name: str) -> pl.Expr:

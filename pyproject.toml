@@ -9,6 +9,7 @@ dependencies = [
     "fastexcel>=0.10.0",
     "xlsxwriter>=3.2.0",
     "dataconf-manager[data] @ git+https://github.com/MaximeRighini/dataconf-manager.git",
+    "pipeline-orchestrator @ git+https://github.com/MaximeRighini/pipeline-orchestrator.git",
 ]
 
 [project.optional-dependencies]
