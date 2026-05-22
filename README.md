@@ -22,6 +22,7 @@ Make sure you are inside your virtual environment, then run:
 ```bash
 make setup    # Create data directories, install dependencies and configure pre-commit
 make all      # Lint, verify, and test in one command
+python src/run.py  # Run the pipeline
 ```
 
 ### Commands
@@ -44,57 +45,48 @@ make docs-deploy   # Deploy the documentation to GitHub Pages
 
 ## Core Architecture Dependencies
 
-This production template relies on two lightweight, decoupled core internal libraries to manage pipeline execution and configuration:
+This template relies on two lightweight internal libraries:
 
-- [dataconf-manager](https://github.com/MaximeRighini/dataconf-manager): Automates multi-layer YAML configuration deep-merging with dynamic text anchor resolution, and abstracts local file system read/write operations for Polars DataFrames.
-- [pipeline-orchestrator](https://github.com/MaximeRighini/pipeline-orchestrator): An execution engine that automatically resolves, sequences, and traces atomic functional steps (`Nodes`) based on their Python type signatures while managing automatic I/O data dumping.
+- [dataconf-manager](https://github.com/MaximeRighini/dataconf-manager) — multi-layer YAML config merging with dynamic anchor resolution, and local file I/O for Polars DataFrames.
+- [pipeline-orchestrator](https://github.com/MaximeRighini/pipeline-orchestrator) — executes ordered `Node` sequences, injects config, and handles automatic data loading and dumping based on paths defined in `config/general/general.yaml`.
 
-> **Modular Framework Note**: These dependencies are completely optional. If you are building an ultra-lightweight project that does not require runtime profile overrides (e.g., multi-environment or multi-market contexts) or formal execution tracing and tracking, you can strip both entries out of your `pyproject.toml` file and delete the `config/`, `src/nodes/`, and `src/pipelines/` directories.
+Both are optional. For projects that do not need multi-environment config or formal pipeline tracing, remove them from `pyproject.toml` and delete `config/`, `src/nodes/`, and `src/pipelines/`. See the comments in `pyproject.toml` for the deps to add back manually.
 
 ---
 
 ## Project Structure & Design Principles
 
-This repository follows a strict separation of concerns, keeping each component focused and easy to navigate.
+Each file has one job.
 
 ```text
-├── config/              # Flexible YAML configuration layers (e.g., general/, env/)
-├── Makefile             # Central command interface (local & CI)
-├── pyproject.toml       # Single-source dependency and tool configuration
+├── config/
+│   └── general/
+│       └── general.yaml  # Base config defaults and data paths
+├── Makefile              # Central command interface (local & CI)
+├── pyproject.toml        # Single-source dependency and tool configuration
 ├── src/
-│   ├── constants.py     # Schema definitions and soft-coded string mappings
-│   ├── utils/           # Shared, atomic helper functions
-│   ├── modules/         # Domain-driven processing logic
-│   ├── nodes/           # Optional: Atomic execution units wrapping business logic
-│   ├── pipelines/       # Optional: Ordered node sequences with auto I/O resolution
-│   └── run.py           # Single orchestration entry point
-└── tests/               # Pytest test suite mirroring the src/ structure
+│   ├── constants.py      # Soft-coded column names and field mappings
+│   ├── utils.py          # Shared, atomic helper functions
+│   ├── modules/          # Domain-driven processing logic
+│   ├── nodes/            # Atomic execution units wrapping business logic
+│   ├── pipelines/        # Ordered node sequences with auto I/O resolution
+│   └── run.py            # Pipeline entry point
+└── tests/                # Pytest test suite mirroring the src/ structure
 ```
 
-### 1. Configuration (`config/`)
+**`constants.py`** centralizes every column name and field mapping. If an upstream field is renamed, one line change propagates across the entire codebase.
 
-Powered by `dataconf-manager`, the `config/` directory does not have a "set in stone" structure. \
-It uses a multi-layer deep merge strategy defined by a `priority_order` (e.g., `["general", "market", "env"]` for instance).
+**`config/general/general.yaml`** holds both application settings and data paths. Keys defined under `data` are intercepted by the Pipeline engine to trigger automatic loading and dumping of Polars DataFrames. Dynamic placeholders (e.g. `{market}`, `{env}`) are resolved at runtime by `ConfigManager`.
 
-- Later layers override earlier ones without erasing entire sub-dictionaries.
-- String values support dynamic anchor resolution (e.g., `data/{market}/output.parquet`).
+**`nodes/`** contains atomic functions wrapped in `Node` objects. Each node handles no I/O — it receives its inputs from the pipeline context and returns a dict of outputs. Input keys are inferred automatically from the function signature.
 
-*For full configuration rules, refer to the `dataconf-manager` repository.*
-
-### 2. Orchestration (`src/nodes/` & `src/pipelines/`)
-
-Powered by `pipeline-orchestrator`, this pattern removes boilerplate and separates business logic from I/O operations:
-
-- **Nodes**: A `Node` wraps a single python function. It handles no I/O. Its input dependencies are automatically inferred from the function's arguments, and its outputs are explicitly declared.
-- **Pipelines**: A `Pipeline` is an ordered sequence of nodes. It injects the config, manages the shared memory context, and handles automatic data loading and dumping. If an output key matches a path defined in `config/data`.yaml, the pipeline automatically saves it to disk.
-
-*For advanced usage (fail-fast behavior, naming conventions), refer to the `pipeline-orchestrator` repository.*
+**`pipelines/`** contains ordered sequences of nodes. The pipeline injects config, resolves inputs (from context or disk), merges outputs back into the shared context, and auto-dumps results when a data path is configured.
 
 ---
 
 ## Code Quality & CI/CD
 
-This codebase enforces code quality at three stages of development:
+This codebase enforces code quality at three stages of development.
 
 1. **`make lint-verify`** runs Ruff and Mypy in read-only mode. Run it regularly during development to catch linting and type errors before they accumulate.
 

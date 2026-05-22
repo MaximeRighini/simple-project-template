@@ -25,6 +25,11 @@ def setup_logging(level: int = logging.INFO) -> None:
     Configures the root logger with a standard format.
 
     Call once at the top of run.py before instantiating any pipeline.
+
+    Parameters
+    ----------
+    level:
+        Logging level. Defaults to logging.INFO.
     """
     logging.basicConfig(
         level=level,
@@ -47,7 +52,7 @@ def timer(func: Callable[..., Any]) -> Callable[..., Any]:
         start = time.perf_counter()
         result = func(*args, **kwargs)
         elapsed = time.perf_counter() - start
-        module_logger.debug("[%s] %.3fs", func.__name__, elapsed)
+        module_logger.debug(f"[{func.__name__}] {elapsed:.3f}s")
         return result
 
     return wrapper
@@ -59,23 +64,31 @@ def log_df_info(df: pl.DataFrame, name: str = "df") -> None:
 
     Useful for quick sanity checks inside node functions or modules
     without adding print statements.
+
+    Parameters
+    ----------
+    df:
+        DataFrame to inspect.
+    name:
+        Label used in the log message. Defaults to "df".
     """
     module_logger = logging.getLogger(__name__)
     col_info = ", ".join(
         f"{col} ({dtype})" for col, dtype in zip(df.columns, df.dtypes, strict=True)
     )
     module_logger.debug(
-        "[%s] shape=(%d, %d) | columns: %s",
-        name,
-        df.height,
-        df.width,
-        col_info,
+        f"[{name}] shape=({df.height}, {df.width}) | columns: {col_info}"
     )
 
 
 def normalize_text(column_name: str) -> pl.Expr:
     """
-    Returns a Polars expression that lowercases and strips whitespace from a string col.
+    Returns a Polars expr that lowercases and strips whitespace from a string column.
+
+    Parameters
+    ----------
+    column_name:
+        Name of the column to normalize.
     """
     return pl.col(column_name).str.to_lowercase().str.strip_chars()
 
@@ -83,11 +96,31 @@ def normalize_text(column_name: str) -> pl.Expr:
 def validate_rows(
     df: pl.DataFrame, schema: type[T]
 ) -> tuple[pl.DataFrame, list[dict[str, Any]]]:
-    """Validates each row of a Polars DataFrame against a Pydantic schema.
+    """
+    Validates each row of a Polars DataFrame against a Pydantic schema.
 
     Automatically selects only the columns defined in the schema.
     Raises ValueError if columns required by the schema are missing from the DataFrame.
-    Returns (valid_df, rejected_rows) — invalid rows are never silently dropped.
+    Returns (valid_df, rejected_rows) -- invalid rows are never silently dropped.
+
+    Parameters
+    ----------
+    df:
+        Input DataFrame to validate.
+    schema:
+        Pydantic model class to validate each row against.
+
+    Returns
+    -------
+    tuple[pl.DataFrame, list[dict[str, Any]]]
+        A tuple of (valid_df, rejected_rows). valid_df contains only rows
+        that passed validation. rejected_rows contains dicts with the
+        original row and the Pydantic validation errors.
+
+    Raises
+    ------
+    ValueError
+        If the DataFrame is missing columns required by the schema.
     """
     valid_dicts: list[dict[str, Any]] = []
     rejected: list[dict[str, Any]] = []
@@ -114,8 +147,8 @@ def validate_rows(
         except ValidationError as e:
             rejected.append({"row": row, "errors": e.errors()})
 
-    # 3. Re-create a clean Polars DataFrame from valid rows
-    # If no rows are valid, return an empty DataFrame preserving the expected schema
+    # 3. Re-create a clean Polars DataFrame from valid rows.
+    # If no rows are valid, return an empty DataFrame preserving the expected schema.
     if valid_dicts:
         valid_df = pl.DataFrame(valid_dicts)
     else:
